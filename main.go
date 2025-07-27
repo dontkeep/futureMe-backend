@@ -27,6 +27,14 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"message": "API is working"})
 	})
 	r.POST("/letters", controllers.CreateLetter)
+	r.GET("/letters/today", controllers.GetTodayLetters)
+	r.POST("/letters/send", controllers.SendEmails)
+	r.GET("/letters", controllers.GetLetterByEmail)
+
+	r.POST("/register", controllers.Register)
+	r.POST("/login", controllers.Login)
+	r.POST("/forgot-password", controllers.ForgotPassword)
+	r.POST("/reset-password", controllers.ResetPassword)
 
 	log.Info().Msgf("Starting server on port %d", 3000)
 	if err := r.Run(":3000"); err != nil {
