@@ -49,23 +49,13 @@ func CreateLetter(c *gin.Context) {
 }
 
 func GetTodayLetters(c *gin.Context) {
-	var letters []models.Letter
 	today := time.Now().Format("2006-01-02")
-	if err := initializers.DB.Where("DATE(deliver_at) = ?", today).Find(&letters).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve letters"})
+	var ids []uint
+	if err := initializers.DB.Model(&models.Letter{}).Where("DATE(deliver_at) = ?", today).Pluck("id", &ids).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve letter ids"})
 		return
 	}
-
-	for i, letter := range letters {
-		decryptedBody, err := utils.Decrypt(letter.BodyEnc)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decrypt letter body"})
-			return
-		}
-		letters[i].BodyEnc = decryptedBody
-	}
-
-	c.JSON(http.StatusOK, letters)
+	c.JSON(http.StatusOK, gin.H{"ids": ids})
 }
 
 func GetLetterByEmail(c *gin.Context) {
@@ -102,9 +92,9 @@ func GetLetterByEmail(c *gin.Context) {
 }
 
 type EmailSendRequest struct {
-	To      []string `json:"to" binding:"required"`
-	Subject string   `json:"subject" binding:"required"`
-	Body    string   `json:"body" binding:"required"`
+	ID      uint   `json:"id" binding:"required"`
+	Subject string `json:"subject" binding:"required"`
+	Body    string `json:"body" binding:"required"`
 }
 
 func SendEmails(c *gin.Context) {
@@ -114,24 +104,30 @@ func SendEmails(c *gin.Context) {
 		return
 	}
 
+	var letter models.Letter
+	if err := initializers.DB.First(&letter, req.ID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Letter not found"})
+		return
+	}
+
+	decryptedBody, err := utils.Decrypt(letter.BodyEnc)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decrypt letter body"})
+		return
+	}
+
 	smtpHost := os.Getenv("SMTP_HOST")
 	smtpPort := os.Getenv("SMTP_PORT")
 	from := os.Getenv("SMTP_FROM_EMAIL")
 	fromName := os.Getenv("SMTP_FROM_NAME")
-
 	addr := fmt.Sprintf("%s:%s", smtpHost, smtpPort)
 
-	for _, to := range req.To {
-		msg := fmt.Sprintf("From: %s <%s>\r\nTo: %s\r\nSubject: %s\r\n\r\n%s",
-			fromName, from, to, req.Subject, req.Body)
-
-		// No auth for local postfix relay
-		err := smtp.SendMail(addr, nil, from, []string{to}, []byte(msg))
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to send to %s: %v", to, err)})
-			return
-		}
+	msg := fmt.Sprintf("From: %s <%s>\r\nTo: %s\r\nSubject: %s\r\n\r\n%s",
+		fromName, from, letter.Email, req.Subject, decryptedBody)
+	err = smtp.SendMail(addr, nil, from, []string{letter.Email}, []byte(msg))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to send to %s: %v", letter.Email, err)})
+		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "Emails sent"})
+	c.JSON(http.StatusOK, gin.H{"message": "Email sent"})
 }

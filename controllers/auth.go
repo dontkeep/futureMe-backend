@@ -83,7 +83,6 @@ func Login(c *gin.Context) {
 }
 
 func Logout(c *gin.Context) {
-	// For JWT, logout is handled client-side by deleting the token.
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out"})
 }
 
