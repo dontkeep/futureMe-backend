@@ -12,5 +12,5 @@ type Letter struct {
 	CreatedAt time.Time
 	SentAt    *time.Time
 	Status    string `gorm:"default:'pending'"`
-	UserID    *uint
+	UserID    uint   `gorm:"not null"`
 }
